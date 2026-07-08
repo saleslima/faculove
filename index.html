@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gerador de Questões por PDF</title>
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Questões PDF" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --border: rgba(255,255,255,.12);
+      --accent: #38bdf8;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --radius: 22px;
+      --shadow: 0 22px 60px rgba(0, 0, 0, .35);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(56,189,248,.22), transparent 32%),
+        radial-gradient(circle at bottom right, rgba(34,197,94,.16), transparent 35%),
+        var(--bg);
+    }
+
+    .app {
+      width: min(1180px, 94vw);
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(17,24,39,.94), rgba(15,23,42,.94));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .hero-main {
+      padding: 34px;
+      position: relative;
+    }
+
+    .badge {
+      display: inline-flex;
+      color: #bfdbfe;
+      font-size: 13px;
+      border: 1px solid rgba(147,197,253,.28);
+      background: rgba(59,130,246,.12);
+      padding: 8px 12px;
+      border-radius: 999px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      font-size: clamp(29px, 4vw, 50px);
+      line-height: 1.02;
+      margin: 0 0 14px;
+      letter-spacing: -1.5px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.7;
+      max-width: 760px;
+      margin: 0;
+    }
+
+    .storage-card {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .storage-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .storage-info {
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 14px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.06);
+      padding: 10px 12px;
+      border-radius: 14px;
+      font-size: 14px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--warning);
+      box-shadow: 0 0 18px var(--warning);
+    }
+
+    .dot.ok {
+      background: var(--success);
+      box-shadow: 0 0 18px var(--success);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 24px;
+    }
+
+    .panel {
+      padding: 24px;
+    }
+
+    .section-title {
+      margin: 0 0 18px;
+      font-size: 19px;
+    }
+
+    .drop-zone {
+      border: 1.5px dashed rgba(148,163,184,.45);
+      border-radius: 20px;
+      padding: 26px;
+      min-height: 170px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      background: rgba(255,255,255,.035);
+      transition: .2s ease;
+      cursor: pointer;
+      margin-bottom: 18px;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(56,189,248,.08);
+      transform: translateY(-1px);
+    }
+
+    .drop-icon {
+      font-size: 38px;
+      margin-bottom: 10px;
+    }
+
+    .drop-zone strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 16px;
+    }
+
+    .drop-zone span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #d1d5db;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    input[type="number"],
+    select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 13px 14px;
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      outline: none;
+      font-size: 15px;
+    }
+
+    select option {
+      color: #111827;
+    }
+
+    input[type="number"]:focus,
+    select:focus {
+      border-color: rgba(56,189,248,.8);
+      box-shadow: 0 0 0 4px rgba(56,189,248,.12);
+    }
+
+    .inline-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      margin: 6px 0 18px;
+    }
+
+    .check-row input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 15px;
+      font-weight: 800;
+      cursor: pointer;
+      color: #06121f;
+      background: var(--accent);
+      transition: .2s ease;
+      font-size: 14px;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
+    }
+
+    button.secondary {
+      color: var(--text);
+      background: rgba(255,255,255,.09);
+      border: 1px solid var(--border);
+    }
+
+    button.success {
+      background: var(--success);
+    }
+
+    button.danger {
+      background: rgba(239,68,68,.15);
+      color: #fecaca;
+      border: 1px solid rgba(239,68,68,.35);
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .progress-wrap {
+      margin: 18px 0 0;
+      display: none;
+    }
+
+    .progress-line {
+      height: 9px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.08);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .progress-line div {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--success));
+      border-radius: 999px;
+      transition: width .25s ease;
+    }
+
+    .progress-text {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 9px;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 18px;
+    }
+
+    .result-header p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .questions {
+      display: grid;
+      gap: 14px;
+    }
+
+    .question-card {
+      background: rgba(255,255,255,.045);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 17px;
+    }
+
+    .q-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .chip {
+      font-size: 12px;
+      color: #c7d2fe;
+      border: 1px solid rgba(199,210,254,.25);
+      background: rgba(99,102,241,.12);
+      border-radius: 999px;
+      padding: 5px 9px;
+    }
+
+    .question-card h3 {
+      margin: 0 0 14px;
+      font-size: 16px;
+      line-height: 1.45;
+    }
+
+    .alternatives {
+      display: grid;
+      gap: 10px;
+    }
+
+    .alternative {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(255,255,255,.035);
+      cursor: pointer;
+      transition: .18s ease;
+      color: #dbeafe;
+      font-weight: 400;
+      margin: 0;
+    }
+
+    .alternative:hover {
+      background: rgba(56,189,248,.07);
+      border-color: rgba(56,189,248,.35);
+    }
+
+    .alternative input {
+      margin-top: 2px;
+      accent-color: var(--accent);
+    }
+
+    .alternative.correct {
+      border-color: rgba(34,197,94,.65);
+      background: rgba(34,197,94,.13);
+    }
+
+    .alternative.wrong {
+      border-color: rgba(239,68,68,.65);
+      background: rgba(239,68,68,.12);
+    }
+
+    .alt-letter {
+      font-weight: 900;
+      color: #ffffff;
+    }
+
+    .feedback {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      color: #cbd5e1;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .grade-box {
+      display: none;
+      border: 1px solid rgba(34,197,94,.28);
+      background: rgba(34,197,94,.10);
+      border-radius: 18px;
+      padding: 18px;
+      margin-bottom: 18px;
+    }
+
+    .grade-main {
+      font-size: 28px;
+      font-weight: 900;
+      margin-bottom: 6px;
+    }
+
+    .grade-detail {
+      color: #d1fae5;
+      line-height: 1.55;
+      font-size: 14px;
+    }
+
+    .empty {
+      min-height: 280px;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      text-align: center;
+      border: 1px dashed var(--border);
+      border-radius: 20px;
+      background: rgba(255,255,255,.025);
+      padding: 22px;
+    }
+
+    .notice {
+      margin-top: 16px;
+      color: #fde68a;
+      background: rgba(245,158,11,.12);
+      border: 1px solid rgba(245,158,11,.25);
+      border-radius: 15px;
+      padding: 12px;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+
+    .install-box {
+      margin-top: 16px;
+      padding: 14px;
+      border: 1px solid rgba(56,189,248,.28);
+      background: rgba(56,189,248,.09);
+      border-radius: 16px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .install-title {
+      font-weight: 900;
+      color: #e0f2fe;
+      font-size: 14px;
+    }
+
+    .install-text {
+      color: #bae6fd;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .install-btn {
+      width: 100%;
+      background: linear-gradient(90deg, #38bdf8, #22c55e);
+      color: #06121f;
+    }
+
+    .install-help {
+      display: none;
+      margin-top: 10px;
+      color: #dbeafe;
+      font-size: 13px;
+      line-height: 1.55;
+      border-top: 1px solid rgba(255,255,255,.12);
+      padding-top: 10px;
+    }
+
+    .install-help.show {
+      display: block;
+    }
+
+    .pwa-ready {
+      color: #bbf7d0;
+      background: rgba(34,197,94,.10);
+      border: 1px solid rgba(34,197,94,.25);
+      border-radius: 12px;
+      padding: 9px 10px;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .footer-note {
+      margin-top: 22px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    @media (max-width: 930px) {
+      .hero,
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-main {
+        padding: 27px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .app {
+        width: min(100% - 24px, 1180px);
+        padding-top: 18px;
+      }
+
+      .hero-main,
+      .panel,
+      .storage-card {
+        padding: 18px;
+      }
+
+      .inline-options {
+        grid-template-columns: 1fr;
+      }
+
+      .result-header {
+        display: block;
+      }
+
+      .btn-row button {
+        width: 100%;
+      }
+
+      .drop-zone {
+        min-height: 145px;
+        padding: 20px 14px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="app">
+    <section class="hero">
+      <div class="card hero-main">
+        <div class="badge">📄 Simulado automático por PDF</div>
+        <h1>Gere questões com 4 alternativas, gabarito e nota final</h1>
+        <p class="subtitle">
+          Envie um PDF, escolha quantidade e dificuldade. A página extrai o texto, monta questões objetivas,
+          salva no storage do navegador e corrige as respostas com comparação ao gabarito.
+        </p>
+      </div>
+
+      <aside class="card storage-card">
+        <div>
+          <div class="storage-title">Storage do navegador</div>
+          <div class="storage-info">
+            O PDF, o texto extraído, as questões, as alternativas, o gabarito e a última correção ficam salvos neste navegador usando IndexedDB.
+          </div>
+        </div>
+        <div class="status-pill">
+          <span id="storageDot" class="dot"></span>
+          <span id="storageStatus">Nenhum PDF salvo ainda</span>
+        </div>
+      </aside>
+    </section>
+
+    <section class="grid">
+      <div class="card panel">
+        <h2 class="section-title">1. Configurar simulado</h2>
+
+        <label for="pdfInput" class="drop-zone" id="dropZone">
+          <input id="pdfInput" type="file" accept="application/pdf" />
+          <div>
+            <div class="drop-icon">⬆️</div>
+            <strong id="fileName">Clique ou arraste um PDF aqui</strong>
+            <span>O arquivo será lido no próprio navegador</span>
+          </div>
+        </label>
+
+        <div class="inline-options">
+          <div class="field">
+            <label for="questionCount">Quantidade de questões</label>
+            <input id="questionCount" type="number" min="1" max="100" value="10" />
+          </div>
+
+          <div class="field">
+            <label for="difficulty">Nível</label>
+            <select id="difficulty">
+              <option value="facil">Fácil</option>
+              <option value="medio">Médio</option>
+              <option value="dificil">Difícil</option>
+            </select>
+          </div>
+        </div>
+
+        <label class="check-row">
+          <input id="shuffleOptions" type="checkbox" checked />
+          Embaralhar alternativas
+        </label>
+
+        <div class="btn-row">
+          <button id="generateBtn">Gerar simulado</button>
+          <button id="restoreBtn" class="secondary">Restaurar salvas</button>
+          <button id="clearBtn" class="danger">Limpar storage</button>
+        </div>
+
+        <div class="install-box">
+          <div class="install-title">📲 Instalar no celular</div>
+          <div class="install-text">
+            Instale esta página como aplicativo no Android ou adicione à tela inicial no iPhone.
+          </div>
+          <button id="installPwaBtn" class="install-btn" type="button">Instalar aplicativo</button>
+          <div id="pwaReady" class="pwa-ready" style="display:none;">
+            App pronto para instalação. No Android, toque em “Instalar aplicativo”. No iPhone, use Compartilhar &gt; Adicionar à Tela de Início.
+          </div>
+          <div id="installHelp" class="install-help">
+            Para instalar como PWA, abra esta pasta por um servidor local ou hospedagem HTTPS.
+            Não funciona corretamente se abrir apenas como arquivo <strong>file://</strong>.<br><br>
+            Android/Chrome: toque em “Instalar aplicativo” ou no menu ⋮ &gt; Instalar app.<br>
+            iPhone/Safari: toque em Compartilhar &gt; Adicionar à Tela de Início.
+          </div>
+        </div>
+
+        <div class="progress-wrap" id="progressWrap">
+          <div class="progress-line"><div id="progressBar"></div></div>
+          <div class="progress-text" id="progressText">Preparando...</div>
+        </div>
+
+        <div class="notice">
+          Esta versão funciona localmente no navegador e não usa API externa. Ela gera as alternativas a partir dos próprios trechos do PDF.
+          PDFs escaneados como imagem precisam de OCR para funcionar corretamente.
+        </div>
+
+        <div class="footer-note">
+          Para melhores resultados, use PDFs com texto selecionável, capítulos bem organizados e parágrafos completos.
+        </div>
+      </div>
+
+      <div class="card panel">
+        <div class="result-header">
+          <div>
+            <h2 class="section-title" style="margin-bottom:0;">2. Questões geradas</h2>
+            <p id="resultSummary">Nenhuma questão gerada ainda.</p>
+          </div>
+
+          <div class="btn-row">
+            <button id="correctBtn" class="success" disabled>Corrigir e ver nota</button>
+            <button id="copyBtn" class="secondary" disabled>Copiar</button>
+            <button id="txtBtn" class="secondary" disabled>Baixar TXT</button>
+            <button id="jsonBtn" class="secondary" disabled>Baixar JSON</button>
+          </div>
+        </div>
+
+        <div id="gradeBox" class="grade-box"></div>
+
+        <div id="questionsArea" class="empty">
+          Envie um PDF e clique em “Gerar simulado”.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+    const DB_NAME = "geradorQuestoesPDF";
+    const DB_VERSION = 2;
+    const STORE_NAME = "documentos";
+    const CURRENT_KEY = "ultimo";
+
+    const LETTERS = ["A", "B", "C", "D"];
+
+    const state = {
+      file: null,
+      fileName: "",
+      text: "",
+      questions: [],
+      difficulty: "facil",
+      count: 10,
+      userAnswers: {},
+      correction: null,
+      shuffleOptions: true
+    };
+
+    const els = {
+      pdfInput: document.getElementById("pdfInput"),
+      dropZone: document.getElementById("dropZone"),
+      fileName: document.getElementById("fileName"),
+      questionCount: document.getElementById("questionCount"),
+      difficulty: document.getElementById("difficulty"),
+      shuffleOptions: document.getElementById("shuffleOptions"),
+      generateBtn: document.getElementById("generateBtn"),
+      restoreBtn: document.getElementById("restoreBtn"),
+      clearBtn: document.getElementById("clearBtn"),
+      progressWrap: document.getElementById("progressWrap"),
+      progressBar: document.getElementById("progressBar"),
+      progressText: document.getElementById("progressText"),
+      questionsArea: document.getElementById("questionsArea"),
+      resultSummary: document.getElementById("resultSummary"),
+      copyBtn: document.getElementById("copyBtn"),
+      txtBtn: document.getElementById("txtBtn"),
+      jsonBtn: document.getElementById("jsonBtn"),
+      correctBtn: document.getElementById("correctBtn"),
+      gradeBox: document.getElementById("gradeBox"),
+      storageDot: document.getElementById("storageDot"),
+      storageStatus: document.getElementById("storageStatus"),
+      installPwaBtn: document.getElementById("installPwaBtn"),
+      installHelp: document.getElementById("installHelp"),
+      pwaReady: document.getElementById("pwaReady")
+    };
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: "id" });
+          }
+        };
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    async function saveToStorage(payload) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).put({
+          id: CURRENT_KEY,
+          ...payload,
+          savedAt: new Date().toISOString()
+        });
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function readFromStorage() {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readonly");
+        const req = tx.objectStore(STORE_NAME).get(CURRENT_KEY);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function clearStorage() {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        tx.objectStore(STORE_NAME).delete(CURRENT_KEY);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    function setProgress(percent, text) {
+      els.progressWrap.style.display = "block";
+      els.progressBar.style.width = `${percent}%`;
+      els.progressText.textContent = text;
+    }
+
+    function hideProgress() {
+      setTimeout(() => {
+        els.progressWrap.style.display = "none";
+        els.progressBar.style.width = "0%";
+      }, 500);
+    }
+
+    function setStorageStatus(saved, fileName = "") {
+      if (saved) {
+        els.storageDot.classList.add("ok");
+        els.storageStatus.textContent = fileName ? `Salvo: ${fileName}` : "Dados salvos no navegador";
+      } else {
+        els.storageDot.classList.remove("ok");
+        els.storageStatus.textContent = "Nenhum PDF salvo ainda";
+      }
+    }
+
+    function cleanText(text) {
+      return text
+        .replace(/\s+/g, " ")
+        .replace(/([.!?])\s+/g, "$1\n")
+        .replace(/\n{2,}/g, "\n")
+        .trim();
+    }
+
+    async function extractTextFromPDF(file) {
+      const buffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      let fullText = "";
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        setProgress(Math.round((pageNum / pdf.numPages) * 65), `Lendo página ${pageNum} de ${pdf.numPages}...`);
+
+        const page = await pdf.getPage(pageNum);
+        const content = await page.getTextContent();
+        const pageText = content.items.map(item => item.str).join(" ");
+        fullText += "\n" + pageText;
+      }
+
+      return cleanText(fullText);
+    }
+
+    function splitSentences(text) {
+      return text
+        .split(/(?<=[.!?])\s+|\n+/)
+        .map(s => s.trim())
+        .filter(s => s.length >= 55 && s.length <= 430)
+        .filter(s => !/^(figura|tabela|gráfico|página|fonte|referência|bibliografia)\b/i.test(s));
+    }
+
+    function getKeywords(text, limit = 8) {
+      const stopwords = new Set([
+        "a", "o", "as", "os", "um", "uma", "uns", "umas", "de", "da", "do", "das", "dos",
+        "em", "no", "na", "nos", "nas", "por", "para", "com", "sem", "sobre", "entre",
+        "que", "qual", "quais", "quando", "onde", "como", "porque", "pois", "são", "ser",
+        "foi", "era", "tem", "têm", "mais", "menos", "muito", "muita", "seu", "sua",
+        "seus", "suas", "isso", "isto", "este", "esta", "esse", "essa", "também", "ou",
+        "e", "é", "à", "ao", "aos", "às", "pela", "pelo", "pelas", "pelos", "dos", "das",
+        "lhe", "nosso", "nossa", "cada", "todo", "toda", "todos", "todas", "pode", "podem"
+      ]);
+
+      const words = text
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9\s-]/gi, " ")
+        .split(/\s+/)
+        .filter(w => w.length > 3 && !stopwords.has(w));
+
+      const freq = {};
+      words.forEach(w => freq[w] = (freq[w] || 0) + 1);
+
+      return Object.entries(freq)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([word]) => word);
+    }
+
+    function sentenceScore(sentence) {
+      let score = 0;
+      if (sentence.length > 80 && sentence.length < 270) score += 3;
+      if (/[,:;]/.test(sentence)) score += 1;
+      if (/\b(conceito|objetivo|processo|função|causa|consequência|resultado|importância|principal|exemplo|etapa|sistema|método|característica|definição|aplicação)\b/i.test(sentence)) score += 3;
+      if (/\d/.test(sentence)) score += 1;
+      if (sentence.split(" ").length > 12) score += 1;
+      return score + Math.random();
+    }
+
+    function chooseCandidates(sentences, count) {
+      const seen = new Set();
+
+      return sentences
+        .map(sentence => ({ sentence, score: sentenceScore(sentence) }))
+        .sort((a, b) => b.score - a.score)
+        .filter(item => {
+          const signature = item.sentence.toLowerCase().slice(0, 90);
+          if (seen.has(signature)) return false;
+          seen.add(signature);
+          return true;
+        })
+        .slice(0, Math.max(count * 5, count + 12));
+    }
+
+    function shuffleArray(array) {
+      const copy = [...array];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    function normalizeAlternative(text) {
+      return text
+        .replace(/\s+/g, " ")
+        .replace(/^\W+/, "")
+        .trim();
+    }
+
+    function makeAlternatives(correctSentence, allCandidates, shuffle) {
+      const correct = normalizeAlternative(correctSentence);
+
+      const distractors = allCandidates
+        .map(c => normalizeAlternative(c.sentence))
+        .filter(s => s && s !== correct)
+        .filter(s => Math.abs(s.length - correct.length) < 230)
+        .slice(0, 18);
+
+      const unique = [];
+      const seen = new Set([correct.toLowerCase().slice(0, 80)]);
+
+      for (const item of shuffleArray(distractors)) {
+        const sig = item.toLowerCase().slice(0, 80);
+        if (!seen.has(sig)) {
+          seen.add(sig);
+          unique.push(item);
+        }
+        if (unique.length === 3) break;
+      }
+
+      while (unique.length < 3) {
+        unique.push([
+          "O texto não apresenta essa relação como informação principal.",
+          "A afirmação está fora do contexto central do PDF.",
+          "Essa alternativa mistura informações sem corresponder ao trecho selecionado."
+        ][unique.length]);
+      }
+
+      let alternatives = [
+        { text: correct, isCorrect: true },
+        ...unique.map(text => ({ text, isCorrect: false }))
+      ];
+
+      if (shuffle) alternatives = shuffleArray(alternatives);
+
+      const correctIndex = alternatives.findIndex(a => a.isCorrect);
+
+      return { alternatives, correctIndex };
+    }
+
+    function makeQuestion(sentence, index, level, allText, allCandidates, shuffleOptions) {
+      const keywords = getKeywords(sentence, 5);
+      const globalKeywords = getKeywords(allText, 12);
+      const main = keywords[0] || globalKeywords[index % Math.max(globalKeywords.length, 1)] || "o tema apresentado";
+      const second = keywords[1] || globalKeywords[(index + 1) % Math.max(globalKeywords.length, 1)] || "o contexto do texto";
+
+      const templates = {
+        facil: [
+          `De acordo com o PDF, assinale a alternativa correta sobre ${main}.`,
+          `Qual alternativa apresenta corretamente a ideia principal relacionada a ${main}?`,
+          `Segundo o conteúdo do PDF, o que pode ser afirmado sobre ${main}?`,
+          `Assinale a alternativa que melhor representa o trecho sobre ${main}.`
+        ],
+        medio: [
+          `Com base no PDF, qual alternativa explica melhor a relação entre ${main} e ${second}?`,
+          `Qual alternativa interpreta corretamente a importância de ${main} no conteúdo apresentado?`,
+          `Considerando o texto, qual afirmação está mais adequada sobre ${main}?`,
+          `Qual alternativa resume melhor a função ou consequência de ${main} no documento?`
+        ],
+        dificil: [
+          `A partir da análise do PDF, qual alternativa apresenta a interpretação mais consistente sobre ${main}?`,
+          `Qual alternativa avalia melhor as implicações de ${main} no contexto do documento?`,
+          `Comparando as ideias do texto, qual alternativa explica de forma mais completa ${main} e ${second}?`,
+          `Qual alternativa demonstra compreensão aprofundada do papel de ${main} no tema abordado?`
+        ]
+      };
+
+      const questionList = templates[level] || templates.facil;
+      const altData = makeAlternatives(sentence, allCandidates, shuffleOptions);
+
+      return {
+        numero: index + 1,
+        nivel: level,
+        pergunta: questionList[index % questionList.length],
+        alternativas: altData.alternatives.map(a => a.text),
+        correta: altData.correctIndex,
+        gabarito: LETTERS[altData.correctIndex],
+        respostaCorreta: altData.alternatives[altData.correctIndex].text,
+        palavrasChave: keywords
+      };
+    }
+
+    function generateQuestionsFromText(text, count, level, shuffleOptions) {
+      const sentences = splitSentences(text);
+
+      if (!sentences.length) {
+        throw new Error("Não foi possível encontrar texto suficiente no PDF. O arquivo pode estar escaneado como imagem ou ter pouco conteúdo textual.");
+      }
+
+      const candidates = chooseCandidates(sentences, count);
+
+      const questions = [];
+      for (let i = 0; i < count; i++) {
+        const candidate = candidates[i % candidates.length];
+        questions.push(makeQuestion(candidate.sentence, i, level, text, candidates, shuffleOptions));
+      }
+
+      return questions;
+    }
+
+    function renderQuestions() {
+      const questions = state.questions;
+
+      if (!questions.length) {
+        els.questionsArea.className = "empty";
+        els.questionsArea.innerHTML = "Envie um PDF e clique em “Gerar simulado”.";
+        els.resultSummary.textContent = "Nenhuma questão gerada ainda.";
+        els.copyBtn.disabled = true;
+        els.txtBtn.disabled = true;
+        els.jsonBtn.disabled = true;
+        els.correctBtn.disabled = true;
+        els.gradeBox.style.display = "none";
+        return;
+      }
+
+      els.questionsArea.className = "questions";
+      els.questionsArea.innerHTML = questions.map((q, qIndex) => {
+        const selected = state.userAnswers[q.numero];
+        const corrected = !!state.correction;
+
+        const alternativesHtml = q.alternativas.map((alt, altIndex) => {
+          const isChecked = selected === altIndex;
+          let cls = "";
+
+          if (corrected && altIndex === q.correta) cls = "correct";
+          if (corrected && isChecked && altIndex !== q.correta) cls = "wrong";
+
+          return `
+            <label class="alternative ${cls}">
+              <input
+                type="radio"
+                name="q${q.numero}"
+                value="${altIndex}"
+                ${isChecked ? "checked" : ""}
+                ${corrected ? "disabled" : ""}
+                onchange="selectAnswer(${q.numero}, ${altIndex})"
+              />
+              <span><span class="alt-letter">${LETTERS[altIndex]})</span> ${escapeHtml(alt)}</span>
+            </label>
+          `;
+        }).join("");
+
+        const feedback = corrected ? `
+          <div class="feedback">
+            <strong>Gabarito:</strong> ${q.gabarito}) ${escapeHtml(q.respostaCorreta)}<br>
+            <strong>Sua resposta:</strong> ${selected === undefined ? "Não respondida" : LETTERS[selected] + ") " + escapeHtml(q.alternativas[selected])}
+          </div>
+        ` : "";
+
+        return `
+          <article class="question-card">
+            <div class="q-meta">
+              <span class="chip">Questão ${q.numero}</span>
+              <span class="chip">${formatLevel(q.nivel)}</span>
+              ${q.palavrasChave.slice(0, 3).map(k => `<span class="chip">#${escapeHtml(k)}</span>`).join("")}
+            </div>
+            <h3>${escapeHtml(q.pergunta)}</h3>
+            <div class="alternatives">${alternativesHtml}</div>
+            ${feedback}
+          </article>
+        `;
+      }).join("");
+
+      els.resultSummary.textContent = `${questions.length} questão(ões) gerada(s) no nível ${formatLevel(state.difficulty)}.`;
+      els.copyBtn.disabled = false;
+      els.txtBtn.disabled = false;
+      els.jsonBtn.disabled = false;
+      els.correctBtn.disabled = false;
+
+      if (state.correction) renderGradeBox();
+      else els.gradeBox.style.display = "none";
+    }
+
+    window.selectAnswer = function(questionNumber, alternativeIndex) {
+      if (state.correction) return;
+      state.userAnswers[questionNumber] = alternativeIndex;
+      saveCurrentState();
+    };
+
+    function correctQuiz() {
+      if (!state.questions.length) return;
+
+      let correct = 0;
+      let wrong = 0;
+      let blank = 0;
+
+      const details = state.questions.map(q => {
+        const selected = state.userAnswers[q.numero];
+
+        if (selected === undefined) {
+          blank++;
+          return {
+            numero: q.numero,
+            status: "em branco",
+            respostaUsuario: null,
+            respostaCorreta: q.correta
+          };
+        }
+
+        if (selected === q.correta) {
+          correct++;
+          return {
+            numero: q.numero,
+            status: "correta",
+            respostaUsuario: selected,
+            respostaCorreta: q.correta
+          };
+        }
+
+        wrong++;
+        return {
+          numero: q.numero,
+          status: "errada",
+          respostaUsuario: selected,
+          respostaCorreta: q.correta
+        };
+      });
+
+      const total = state.questions.length;
+      const percent = total ? Math.round((correct / total) * 100) : 0;
+      const grade10 = total ? ((correct / total) * 10).toFixed(1) : "0.0";
+
+      state.correction = {
+        total,
+        correct,
+        wrong,
+        blank,
+        percent,
+        grade10,
+        details,
+        correctedAt: new Date().toISOString()
+      };
+
+      renderQuestions();
+      saveCurrentState();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function renderGradeBox() {
+      const c = state.correction;
+      if (!c) return;
+
+      els.gradeBox.style.display = "block";
+      els.gradeBox.innerHTML = `
+        <div class="grade-main">Nota: ${c.grade10}/10</div>
+        <div class="grade-detail">
+          Você acertou <strong>${c.correct}</strong> de <strong>${c.total}</strong> questões.
+          Percentual: <strong>${c.percent}%</strong>. Erros: <strong>${c.wrong}</strong>.
+          Em branco: <strong>${c.blank}</strong>.
+        </div>
+      `;
+    }
+
+    function formatLevel(level) {
+      if (level === "facil") return "Fácil";
+      if (level === "medio") return "Médio";
+      if (level === "dificil") return "Difícil";
+      return level;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function questionsToText() {
+      return state.questions.map(q => {
+        const alternatives = q.alternativas
+          .map((alt, i) => `${LETTERS[i]}) ${alt}`)
+          .join("\n");
+
+        return `${q.numero}. ${q.pergunta}
+${alternatives}
+
+Gabarito: ${q.gabarito}) ${q.respostaCorreta}`;
+      }).join("\n\n-----------------------------\n\n") + finalGradeText();
+    }
+
+    function finalGradeText() {
+      if (!state.correction) return "";
+
+      const c = state.correction;
+      return `
+
+=============================
+RESULTADO FINAL
+Nota: ${c.grade10}/10
+Acertos: ${c.correct}/${c.total}
+Erros: ${c.wrong}
+Em branco: ${c.blank}
+Percentual: ${c.percent}%
+`;
+    }
+
+    function downloadFile(filename, content, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function handleFile(file) {
+      if (!file || file.type !== "application/pdf") {
+        alert("Selecione um arquivo PDF válido.");
+        return;
+      }
+
+      state.file = file;
+      state.fileName = file.name;
+      state.text = "";
+      state.questions = [];
+      state.userAnswers = {};
+      state.correction = null;
+
+      els.fileName.textContent = file.name;
+      renderQuestions();
+      setStorageStatus(false);
+    }
+
+    async function generate() {
+      try {
+        if (!state.file && !state.text) {
+          alert("Envie um PDF antes de gerar as questões.");
+          return;
+        }
+
+        state.count = Number(els.questionCount.value || 10);
+        state.difficulty = els.difficulty.value;
+        state.shuffleOptions = els.shuffleOptions.checked;
+        state.userAnswers = {};
+        state.correction = null;
+
+        if (state.count < 1 || state.count > 100) {
+          alert("Escolha uma quantidade entre 1 e 100 questões.");
+          return;
+        }
+
+        els.generateBtn.disabled = true;
+
+        if (state.file) {
+          setProgress(5, "Iniciando leitura do PDF...");
+          state.text = await extractTextFromPDF(state.file);
+        }
+
+        setProgress(78, "Selecionando trechos importantes...");
+        await wait(250);
+
+        setProgress(88, "Gerando questões com 4 alternativas...");
+        state.questions = generateQuestionsFromText(
+          state.text,
+          state.count,
+          state.difficulty,
+          state.shuffleOptions
+        );
+
+        renderQuestions();
+
+        setProgress(96, "Salvando no storage do navegador...");
+        await saveCurrentState();
+
+        setProgress(100, "Concluído!");
+        setStorageStatus(true, state.fileName || "PDF restaurado");
+        hideProgress();
+      } catch (err) {
+        alert(err.message || "Erro ao gerar questões.");
+        hideProgress();
+      } finally {
+        els.generateBtn.disabled = false;
+      }
+    }
+
+    async function saveCurrentState() {
+      await saveToStorage({
+        fileName: state.fileName || "PDF restaurado",
+        pdfBlob: state.file || null,
+        text: state.text,
+        questions: state.questions,
+        difficulty: state.difficulty,
+        count: state.count,
+        userAnswers: state.userAnswers,
+        correction: state.correction,
+        shuffleOptions: state.shuffleOptions
+      });
+    }
+
+    async function restoreSaved() {
+      try {
+        const saved = await readFromStorage();
+
+        if (!saved) {
+          alert("Não há dados salvos no storage deste navegador.");
+          setStorageStatus(false);
+          return;
+        }
+
+        state.file = saved.pdfBlob || null;
+        state.fileName = saved.fileName || "PDF salvo";
+        state.text = saved.text || "";
+        state.questions = saved.questions || [];
+        state.difficulty = saved.difficulty || "facil";
+        state.count = saved.count || 10;
+        state.userAnswers = saved.userAnswers || {};
+        state.correction = saved.correction || null;
+        state.shuffleOptions = saved.shuffleOptions !== false;
+
+        els.fileName.textContent = state.fileName;
+        els.questionCount.value = state.count;
+        els.difficulty.value = state.difficulty;
+        els.shuffleOptions.checked = state.shuffleOptions;
+
+        renderQuestions();
+        setStorageStatus(true, state.fileName);
+      } catch (err) {
+        alert("Não foi possível restaurar os dados salvos.");
+      }
+    }
+
+    async function removeSaved() {
+      if (!confirm("Deseja apagar o PDF, as questões, o gabarito e a nota salvos neste navegador?")) return;
+
+      await clearStorage();
+
+      state.file = null;
+      state.fileName = "";
+      state.text = "";
+      state.questions = [];
+      state.userAnswers = {};
+      state.correction = null;
+
+      els.pdfInput.value = "";
+      els.fileName.textContent = "Clique ou arraste um PDF aqui";
+      renderQuestions();
+      setStorageStatus(false);
+    }
+
+    function wait(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    els.pdfInput.addEventListener("change", e => handleFile(e.target.files[0]));
+    els.generateBtn.addEventListener("click", generate);
+    els.restoreBtn.addEventListener("click", restoreSaved);
+    els.clearBtn.addEventListener("click", removeSaved);
+    els.correctBtn.addEventListener("click", correctQuiz);
+
+    els.copyBtn.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(questionsToText());
+      alert("Questões copiadas com gabarito.");
+    });
+
+    els.txtBtn.addEventListener("click", () => {
+      downloadFile("simulado-com-gabarito.txt", questionsToText(), "text/plain;charset=utf-8");
+    });
+
+    els.jsonBtn.addEventListener("click", () => {
+      downloadFile(
+        "simulado-com-gabarito.json",
+        JSON.stringify({
+          arquivo: state.fileName,
+          nivel: state.difficulty,
+          quantidade: state.questions.length,
+          respostasUsuario: state.userAnswers,
+          correcao: state.correction,
+          questoes: state.questions
+        }, null, 2),
+        "application/json;charset=utf-8"
+      );
+    });
+
+    els.dropZone.addEventListener("dragover", e => {
+      e.preventDefault();
+      els.dropZone.classList.add("dragover");
+    });
+
+    els.dropZone.addEventListener("dragleave", () => {
+      els.dropZone.classList.remove("dragover");
+    });
+
+    els.dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      els.dropZone.classList.remove("dragover");
+      handleFile(e.dataTransfer.files[0]);
+    });
+
+
+    let deferredInstallPrompt = null;
+
+    function isIosDevice() {
+      return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+    }
+
+    function isStandaloneMode() {
+      return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    }
+
+    function initPWAInstall() {
+      if (!els.installPwaBtn) return;
+
+      if (isStandaloneMode()) {
+        els.installPwaBtn.textContent = "Aplicativo já instalado";
+        els.installPwaBtn.disabled = true;
+        els.pwaReady.style.display = "block";
+        els.installHelp.classList.remove("show");
+        return;
+      }
+
+      if (location.protocol === "file:") {
+        els.installPwaBtn.textContent = "Como instalar";
+        els.installHelp.classList.add("show");
+        return;
+      }
+
+      if (isIosDevice()) {
+        els.installPwaBtn.textContent = "Ver instruções para iPhone";
+        els.installHelp.classList.add("show");
+        els.pwaReady.style.display = "block";
+        return;
+      }
+
+      els.installPwaBtn.textContent = "Instalar aplicativo";
+      els.installHelp.classList.remove("show");
+    }
+
+    window.addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      if (els.installPwaBtn) {
+        els.installPwaBtn.disabled = false;
+        els.installPwaBtn.textContent = "Instalar aplicativo";
+      }
+      if (els.pwaReady) els.pwaReady.style.display = "block";
+    });
+
+    window.addEventListener("appinstalled", () => {
+      deferredInstallPrompt = null;
+      if (els.installPwaBtn) {
+        els.installPwaBtn.textContent = "Aplicativo instalado";
+        els.installPwaBtn.disabled = true;
+      }
+      if (els.pwaReady) {
+        els.pwaReady.style.display = "block";
+        els.pwaReady.textContent = "Aplicativo instalado com sucesso.";
+      }
+    });
+
+    async function handleInstallClick() {
+      if (location.protocol === "file:" || isIosDevice()) {
+        els.installHelp.classList.toggle("show");
+        return;
+      }
+
+      if (!deferredInstallPrompt) {
+        els.installHelp.classList.toggle("show");
+        return;
+      }
+
+      deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+
+      if (choice.outcome === "accepted") {
+        els.installPwaBtn.textContent = "Instalando...";
+      }
+
+      deferredInstallPrompt = null;
+    }
+
+    if ("serviceWorker" in navigator && location.protocol !== "file:") {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(() => {
+          console.warn("Service worker não pôde ser registrado.");
+        });
+      });
+    }
+
+
+    window.addEventListener("load", async () => {
+      try {
+        const saved = await readFromStorage();
+        if (saved) {
+          setStorageStatus(true, saved.fileName || "PDF salvo");
+        }
+      } catch {
+        setStorageStatus(false);
+      }
+
+      initPWAInstall();
+    });
+
+    if (els.installPwaBtn) {
+      els.installPwaBtn.addEventListener("click", handleInstallClick);
+    }
+  </script>
+</body>
+</html>
