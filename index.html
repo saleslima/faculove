@@ -957,32 +957,48 @@
       const source = normalizeAlternative(sentence);
       const patterns = [
         {
+          regex: /^([A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ'’-]{1,40})\s+(?:joga|jogava|pratica|praticava)\s+((?:futebol|basquete|v[oô]lei|voleibol|atletismo|natação|handebol|tênis|judô|karatê|ciclismo|corrida)(?:\s+[^,.;]{0,40})?)/i,
+          question: (subject) => `Qual esporte ${subject} praticava?`
+        },
+        {
+          regex: /^([A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ'’-]{1,40}).{0,100}?\s+(?:estuda|estudava|aprende|aprendia|cursa|cursava)\s+((?:matemática|português|língua portuguesa|biologia|geografia|história|física|química|inglês|artes)(?:\s+[^,.;]{0,35})?)/i,
+          question: (subject) => `Qual matéria ${subject} estudava?`
+        },
+        {
+          regex: /^([A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ'’-]{1,40})\s+(?:mora|morava|vive|vivia|reside|residia)\s+(?:em|na|no)\s+(.{2,100})$/i,
+          question: (subject) => `Onde ${subject} morava?`
+        },
+        {
+          regex: /^([A-ZÀ-ÖØ-Ý][A-Za-zÀ-ÖØ-öø-ÿ'’-]{1,40})\s+(?:trabalha|trabalhava|atua|atuava)\s+(?:como|na|no|em)\s+(.{2,120})$/i,
+          question: (subject) => `Em que ${subject} trabalhava?`
+        },
+        {
           regex: /^(.{3,90}?)\s+(?:é definido como|é definida como|define-se como|consiste em|corresponde a|refere-se a)\s+(.{3,190})$/i,
-          question: (subject) => `Segundo o PDF, como se define ${subject}?`
+          question: (subject) => `Como se define ${subject}?`
         },
         {
           regex: /^(.{3,90}?)\s+(?:é|são)\s+(.{3,190})$/i,
-          question: (subject) => `Segundo o PDF, o que é ${subject}?`
+          question: (subject) => `O que é ${subject}?`
         },
         {
           regex: /^(.{3,100}?)\s+(?:tem como objetivo|possui como objetivo|tem por objetivo|objetiva|visa)\s+(.{3,190})$/i,
-          question: (subject) => `Qual é o objetivo de ${subject}, conforme o PDF?`
+          question: (subject) => `Qual é o objetivo de ${subject}?`
         },
         {
           regex: /^(.{3,100}?)\s+(?:tem como função|possui a função de|é responsável por|serve para)\s+(.{3,190})$/i,
-          question: (subject) => `Qual é a função de ${subject}, segundo o PDF?`
+          question: (subject) => `Qual é a função de ${subject}?`
         },
         {
           regex: /^(.{3,100}?)\s+(?:inclui|incluem|compreende|compreendem|abrange|abrangem|é composto por|é composta por)\s+(.{3,190})$/i,
-          question: (subject) => `O que ${subject} inclui ou compreende, conforme o PDF?`
+          question: (subject) => `O que ${subject} inclui ou compreende?`
         },
         {
           regex: /^(.{3,100}?)\s+(?:ocorre|ocorrem|acontece|acontecem)\s+(?:quando|por causa de|devido a)\s+(.{3,190})$/i,
-          question: (subject) => `Em qual situação ${subject} ocorre, segundo o PDF?`
+          question: (subject) => `Em qual situação ${subject} ocorre?`
         },
         {
           regex: /^(.{3,100}?)\s+(?:permite|permitem|possibilita|possibilitam)\s+(.{3,190})$/i,
-          question: (subject) => `O que ${subject} permite, conforme o PDF?`
+          question: (subject) => `O que ${subject} permite?`
         }
       ];
 
@@ -1006,7 +1022,7 @@
       if (dateMatch) {
         const event = trimFactText(dateMatch[1], 140);
         return {
-          question: `Em que ano ocorreu o fato mencionado no PDF: “${event}”?`,
+          question: `Em que ano ocorreu ${event}?`,
           answer: dateMatch[2],
           subject: event,
           source
@@ -1021,7 +1037,7 @@
       const clauses = source.split(/[,;:]/).map(part => trimFactText(part, 165)).filter(Boolean);
       if (clauses.length >= 2 && validFactPart(clauses[0], 8, 110) && validFactPart(clauses[1], 4, 165)) {
         return {
-          question: `De acordo com o PDF, qual alternativa apresenta corretamente uma informação sobre ${clauses[0]}?`,
+          question: `Qual informação está relacionada a ${clauses[0]}?`,
           answer: clauses[1],
           subject: clauses[0],
           source
@@ -1083,7 +1099,7 @@
       const neutralFallback = [
         "uma finalidade diferente da apresentada no texto",
         "um processo não mencionado no conteúdo",
-        "uma característica incompatível com o PDF"
+        "uma característica incompatível com o conteúdo"
       ];
       while (candidates.length < 3) candidates.push(neutralFallback[candidates.length]);
 
@@ -1100,16 +1116,8 @@
     }
 
     function questionByDifficulty(fact, level) {
-      const subject = trimFactText(fact.subject || "o conteúdo apresentado", 110);
-
-      if (level === "dificil") {
-        return `Considerando as informações apresentadas no PDF sobre ${subject}, assinale a alternativa correta.`;
-      }
-
-      if (level === "medio") {
-        return `De acordo com o PDF, qual alternativa corresponde corretamente ao que é apresentado sobre ${subject}?`;
-      }
-
+      // A dificuldade altera a seleção dos fatos e das alternativas, não adiciona
+      // expressões artificiais como “segundo o PDF” ao enunciado.
       return fact.question;
     }
 
