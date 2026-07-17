@@ -913,91 +913,219 @@
     }
 
     function normalizeAlternative(text) {
-      return text
+      return String(text || "")
         .replace(/\s+/g, " ")
         .replace(/^\W+/, "")
+        .replace(/[.,;:!?]+$/, "")
         .trim();
     }
 
-    function makeAlternatives(correctSentence, allCandidates, shuffle) {
-      const correct = normalizeAlternative(correctSentence);
+    function escapeRegExp(value) {
+      return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
 
-      const distractors = allCandidates
-        .map(c => normalizeAlternative(c.sentence))
-        .filter(s => s && s !== correct)
-        .filter(s => Math.abs(s.length - correct.length) < 230)
-        .slice(0, 18);
+    function findOriginalTerm(sentence, normalizedKeyword) {
+      const words = sentence.match(/[A-Za-zÀ-ÖØ-öø-ÿ0-9-]+/g) || [];
+      const target = normalizedKeyword
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
 
-      const unique = [];
-      const seen = new Set([correct.toLowerCase().slice(0, 80)]);
+      return words.find(word =>
+        word.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() === target
+      ) || "";
+    }
 
-      for (const item of shuffleArray(distractors)) {
-        const sig = item.toLowerCase().slice(0, 80);
-        if (!seen.has(sig)) {
-          seen.add(sig);
-          unique.push(item);
+    function trimFactText(value, maxLength = 150) {
+      let text = normalizeAlternative(value)
+        .replace(/^(que|o qual|a qual)\s+/i, "")
+        .replace(/\s+(?:e|mas|porém)\s+[^,.;]{35,}$/i, "")
+        .trim();
+
+      if (text.length > maxLength) {
+        const shortened = text.slice(0, maxLength);
+        text = shortened.replace(/\s+\S*$/, "").trim();
+      }
+      return text;
+    }
+
+    function validFactPart(value, min = 2, max = 170) {
+      const clean = trimFactText(value, max);
+      return clean.length >= min && clean.length <= max && clean.split(/\s+/).length <= 28;
+    }
+
+    function sentenceToFact(sentence) {
+      const source = normalizeAlternative(sentence);
+      const patterns = [
+        {
+          regex: /^(.{3,90}?)\s+(?:é definido como|é definida como|define-se como|consiste em|corresponde a|refere-se a)\s+(.{3,190})$/i,
+          question: (subject) => `Segundo o PDF, como se define ${subject}?`
+        },
+        {
+          regex: /^(.{3,90}?)\s+(?:é|são)\s+(.{3,190})$/i,
+          question: (subject) => `Segundo o PDF, o que é ${subject}?`
+        },
+        {
+          regex: /^(.{3,100}?)\s+(?:tem como objetivo|possui como objetivo|tem por objetivo|objetiva|visa)\s+(.{3,190})$/i,
+          question: (subject) => `Qual é o objetivo de ${subject}, conforme o PDF?`
+        },
+        {
+          regex: /^(.{3,100}?)\s+(?:tem como função|possui a função de|é responsável por|serve para)\s+(.{3,190})$/i,
+          question: (subject) => `Qual é a função de ${subject}, segundo o PDF?`
+        },
+        {
+          regex: /^(.{3,100}?)\s+(?:inclui|incluem|compreende|compreendem|abrange|abrangem|é composto por|é composta por)\s+(.{3,190})$/i,
+          question: (subject) => `O que ${subject} inclui ou compreende, conforme o PDF?`
+        },
+        {
+          regex: /^(.{3,100}?)\s+(?:ocorre|ocorrem|acontece|acontecem)\s+(?:quando|por causa de|devido a)\s+(.{3,190})$/i,
+          question: (subject) => `Em qual situação ${subject} ocorre, segundo o PDF?`
+        },
+        {
+          regex: /^(.{3,100}?)\s+(?:permite|permitem|possibilita|possibilitam)\s+(.{3,190})$/i,
+          question: (subject) => `O que ${subject} permite, conforme o PDF?`
         }
-        if (unique.length === 3) break;
+      ];
+
+      for (const item of patterns) {
+        const match = source.match(item.regex);
+        if (!match) continue;
+
+        const subject = trimFactText(match[1], 100).replace(/^(o|a|os|as)\s+/i, "");
+        const answer = trimFactText(match[2], 170);
+        if (validFactPart(subject, 3, 100) && validFactPart(answer, 3, 170)) {
+          return {
+            question: item.question(subject),
+            answer,
+            subject,
+            source
+          };
+        }
       }
 
-      while (unique.length < 3) {
-        unique.push([
-          "O texto não apresenta essa relação como informação principal.",
-          "A afirmação está fora do contexto central do PDF.",
-          "Essa alternativa mistura informações sem corresponder ao trecho selecionado."
-        ][unique.length]);
+      const dateMatch = source.match(/^(.{8,150}?)\s+(?:em|no ano de)\s+(\d{4})\b/i);
+      if (dateMatch) {
+        const event = trimFactText(dateMatch[1], 140);
+        return {
+          question: `Em que ano ocorreu o fato mencionado no PDF: “${event}”?`,
+          answer: dateMatch[2],
+          subject: event,
+          source
+        };
       }
+
+      return null;
+    }
+
+    function genericFactFromSentence(sentence) {
+      const source = normalizeAlternative(sentence);
+      const clauses = source.split(/[,;:]/).map(part => trimFactText(part, 165)).filter(Boolean);
+      if (clauses.length >= 2 && validFactPart(clauses[0], 8, 110) && validFactPart(clauses[1], 4, 165)) {
+        return {
+          question: `De acordo com o PDF, qual alternativa apresenta corretamente uma informação sobre ${clauses[0]}?`,
+          answer: clauses[1],
+          subject: clauses[0],
+          source
+        };
+      }
+      return null;
+    }
+
+    function extractFacts(candidates) {
+      const facts = [];
+      const seen = new Set();
+
+      for (const item of candidates) {
+        const fact = sentenceToFact(item.sentence) || genericFactFromSentence(item.sentence);
+        if (!fact) continue;
+        const signature = `${fact.question}|${fact.answer}`
+          .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase();
+        if (seen.has(signature)) continue;
+        seen.add(signature);
+        facts.push(fact);
+      }
+      return facts;
+    }
+
+    function alternativeType(text) {
+      const clean = trimFactText(text);
+      if (/^\d{4}$/.test(clean)) return "year";
+      if (/^\d+(?:[.,]\d+)?\s*%$/.test(clean)) return "percent";
+      if (/^\d+(?:[.,]\d+)?$/.test(clean)) return "number";
+      if (clean.split(/\s+/).length <= 3) return "short";
+      return "phrase";
+    }
+
+    function makePlausibleAlternatives(correctAnswer, answerPool, shuffle) {
+      const correct = trimFactText(correctAnswer, 170);
+      const correctSignature = correct.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      const type = alternativeType(correct);
+
+      let candidates = shuffleArray(answerPool)
+        .map(value => trimFactText(value, 170))
+        .filter(Boolean)
+        .filter(value => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() !== correctSignature)
+        .filter(value => alternativeType(value) === type)
+        .filter((value, index, arr) => arr.findIndex(v => v.toLowerCase() === value.toLowerCase()) === index);
+
+      if (type === "year") {
+        const year = Number(correct);
+        candidates = shuffleArray([year - 2, year - 1, year + 1, year + 2].map(String));
+      }
+
+      if (candidates.length < 3) {
+        const supplemental = shuffleArray(answerPool)
+          .map(value => trimFactText(value, 170))
+          .filter(value => value && value.toLowerCase() !== correct.toLowerCase() && !candidates.includes(value));
+        candidates.push(...supplemental);
+      }
+
+      const neutralFallback = [
+        "uma finalidade diferente da apresentada no texto",
+        "um processo não mencionado no conteúdo",
+        "uma característica incompatível com o PDF"
+      ];
+      while (candidates.length < 3) candidates.push(neutralFallback[candidates.length]);
 
       let alternatives = [
         { text: correct, isCorrect: true },
-        ...unique.map(text => ({ text, isCorrect: false }))
+        ...candidates.slice(0, 3).map(text => ({ text, isCorrect: false }))
       ];
 
       if (shuffle) alternatives = shuffleArray(alternatives);
-
-      const correctIndex = alternatives.findIndex(a => a.isCorrect);
-
-      return { alternatives, correctIndex };
+      return {
+        alternatives,
+        correctIndex: alternatives.findIndex(item => item.isCorrect)
+      };
     }
 
-    function makeQuestion(sentence, index, level, allText, allCandidates, shuffleOptions) {
-      const keywords = getKeywords(sentence, 5);
-      const globalKeywords = getKeywords(allText, 12);
-      const main = keywords[0] || globalKeywords[index % Math.max(globalKeywords.length, 1)] || "o tema apresentado";
-      const second = keywords[1] || globalKeywords[(index + 1) % Math.max(globalKeywords.length, 1)] || "o contexto do texto";
+    function questionByDifficulty(fact, level) {
+      const subject = trimFactText(fact.subject || "o conteúdo apresentado", 110);
 
-      const templates = {
-        facil: [
-          `De acordo com o PDF, assinale a alternativa correta sobre ${main}.`,
-          `Qual alternativa apresenta corretamente a ideia principal relacionada a ${main}?`,
-          `Segundo o conteúdo do PDF, o que pode ser afirmado sobre ${main}?`,
-          `Assinale a alternativa que melhor representa o trecho sobre ${main}.`
-        ],
-        medio: [
-          `Com base no PDF, qual alternativa explica melhor a relação entre ${main} e ${second}?`,
-          `Qual alternativa interpreta corretamente a importância de ${main} no conteúdo apresentado?`,
-          `Considerando o texto, qual afirmação está mais adequada sobre ${main}?`,
-          `Qual alternativa resume melhor a função ou consequência de ${main} no documento?`
-        ],
-        dificil: [
-          `A partir da análise do PDF, qual alternativa apresenta a interpretação mais consistente sobre ${main}?`,
-          `Qual alternativa avalia melhor as implicações de ${main} no contexto do documento?`,
-          `Comparando as ideias do texto, qual alternativa explica de forma mais completa ${main} e ${second}?`,
-          `Qual alternativa demonstra compreensão aprofundada do papel de ${main} no tema abordado?`
-        ]
-      };
+      if (level === "dificil") {
+        return `Considerando as informações apresentadas no PDF sobre ${subject}, assinale a alternativa correta.`;
+      }
 
-      const questionList = templates[level] || templates.facil;
-      const altData = makeAlternatives(sentence, allCandidates, shuffleOptions);
+      if (level === "medio") {
+        return `De acordo com o PDF, qual alternativa corresponde corretamente ao que é apresentado sobre ${subject}?`;
+      }
+
+      return fact.question;
+    }
+
+    function makeQuestion(fact, index, level, answerPool, shuffleOptions) {
+      const altData = makePlausibleAlternatives(fact.answer, answerPool, shuffleOptions);
+      const keywords = getKeywords(`${fact.subject} ${fact.source}`, 5);
 
       return {
         numero: index + 1,
         nivel: level,
-        pergunta: questionList[index % questionList.length],
-        alternativas: altData.alternatives.map(a => a.text),
+        pergunta: questionByDifficulty(fact, level),
+        alternativas: altData.alternatives.map(item => item.text),
         correta: altData.correctIndex,
         gabarito: LETTERS[altData.correctIndex],
         respostaCorreta: altData.alternatives[altData.correctIndex].text,
+        explicacao: fact.source,
         palavrasChave: keywords
       };
     }
@@ -1009,12 +1137,24 @@
         throw new Error("Não foi possível encontrar texto suficiente no PDF. O arquivo pode estar escaneado como imagem ou ter pouco conteúdo textual.");
       }
 
-      const candidates = chooseCandidates(sentences, count);
+      const candidates = chooseCandidates(sentences, Math.max(count * 5, 30));
+      const facts = extractFacts(candidates);
 
-      const questions = [];
-      for (let i = 0; i < count; i++) {
-        const candidate = candidates[i % candidates.length];
-        questions.push(makeQuestion(candidate.sentence, i, level, text, candidates, shuffleOptions));
+      if (!facts.length) {
+        throw new Error("Não foi possível transformar o conteúdo em perguntas objetivas. Tente um PDF com texto selecionável e frases explicativas mais completas.");
+      }
+
+      const answerPool = facts.map(fact => fact.answer);
+      const selected = facts.slice(0, Math.min(count, facts.length));
+      const questions = selected.map((fact, index) =>
+        makeQuestion(fact, index, level, answerPool, shuffleOptions)
+      );
+
+      let cursor = 0;
+      while (questions.length < count && facts.length) {
+        const fact = facts[cursor % facts.length];
+        questions.push(makeQuestion(fact, questions.length, level, answerPool, shuffleOptions));
+        cursor++;
       }
 
       return questions;
@@ -1065,7 +1205,8 @@
         const feedback = corrected ? `
           <div class="feedback">
             <strong>Gabarito:</strong> ${q.gabarito}) ${escapeHtml(q.respostaCorreta)}<br>
-            <strong>Sua resposta:</strong> ${selected === undefined ? "Não respondida" : LETTERS[selected] + ") " + escapeHtml(q.alternativas[selected])}
+            <strong>Sua resposta:</strong> ${selected === undefined ? "Não respondida" : LETTERS[selected] + ") " + escapeHtml(q.alternativas[selected])}<br>
+            <strong>Trecho de referência:</strong> ${escapeHtml(q.explicacao || "")}
           </div>
         ` : "";
 
@@ -1190,16 +1331,18 @@
     }
 
     function questionsToText() {
-      return state.questions.map(q => {
+      const body = state.questions.map(q => {
         const alternatives = q.alternativas
           .map((alt, i) => `${LETTERS[i]}) ${alt}`)
           .join("\n");
+        return `${q.numero}. ${q.pergunta}\n${alternatives}`;
+      }).join("\n\n-----------------------------\n\n");
 
-        return `${q.numero}. ${q.pergunta}
-${alternatives}
+      const answerKey = state.questions
+        .map(q => `${q.numero}. ${q.gabarito}) ${q.respostaCorreta}`)
+        .join("\n");
 
-Gabarito: ${q.gabarito}) ${q.respostaCorreta}`;
-      }).join("\n\n-----------------------------\n\n") + finalGradeText();
+      return `${body}\n\n=============================\nGABARITO\n${answerKey}${finalGradeText()}`;
     }
 
     function finalGradeText() {
